@@ -11,16 +11,12 @@
   <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    /* 画面全体の跳ね返り・ゴム引き動作を完全ロック */
     html, body {
-      position: fixed;
-      top: 0;
-      left: 0;
       width: 100%;
       height: 100%;
+      height: 100dvh;
       overflow: hidden;
       overscroll-behavior: none;
-      touch-action: none;
       -webkit-user-select: none;
       user-select: none;
     }
@@ -44,19 +40,236 @@
     }
   </style>
 </head>
-<body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+<body class="bg-slate-100 text-slate-800 font-sans h-[100dvh] flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
-  <div id="app" class="flex-1 flex flex-col max-w-md landscape:max-w-2xl mx-auto w-full bg-white shadow-xl min-h-screen relative overflow-hidden">
+  <div id="app" class="flex-1 flex flex-col max-w-md landscape:max-w-2xl mx-auto w-full bg-white shadow-xl h-[100dvh] max-h-[100dvh] relative overflow-hidden">
     
     <!-- ヘッダー -->
-    <header class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white p-4 shadow-md flex justify-between items-center z-10">
+    <header class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white p-3 landscape:p-2 shadow-md flex justify-between items-center z-10 shrink-0">
       <div>
-        <h1 class="text-lg font-bold tracking-tight">フラッシュカード練習</h1>
+        <h1 class="text-base sm:text-lg font-bold tracking-tight">フラッシュカード練習</h1>
       </div>
       <div class="flex gap-2">
         <button 
           @click="currentTab = 'card'" 
-          :class="['px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1', currentTab === 'card' ? 'bg-white text-indigo-700 shadow-sm font-bold' : 'bg-indigo-700/50 text-indigo-100 hover:bg-indigo-700']"
+          :class="['px-3 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1', currentTab === 'card' ? 'bg-white text-indigo-700 shadow-sm font-bold' : 'bg-indigo-700/50 text-indigo-100 hover:bg-indigo-700']"
+        >
+          <i class="fa-solid fa-layer-group"></i> カード
+        </button>
+        <button 
+          @click="currentTab = 'list'" 
+          :class="['px-3 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1', currentTab === 'list' ? 'bg-white text-indigo-700 shadow-sm font-bold' : 'bg-indigo-700/50 text-indigo-100 hover:bg-indigo-700']"
+        >
+          <i class="fa-solid fa-list-ul"></i> 一覧
+        </button>
+      </div>
+    </header>
+
+    <!-- フラッシュカードタブ -->
+    <main v-if="currentTab === 'card'" class="flex-1 flex flex-col p-3 landscape:p-2 justify-between overflow-y-auto no-select">
+      
+      <!-- コントロールバー -->
+      <div class="space-y-1.5 landscape:space-y-1 shrink-0">
+        <div class="grid grid-cols-1 landscape:grid-cols-2 gap-1.5 landscape:gap-2">
+          <!-- カテゴリー選択 -->
+          <div>
+            <label class="text-[10px] landscape:text-[9px] font-bold text-slate-500 mb-0.5 block">1. 練習する範囲（カテゴリー）</label>
+            <select 
+              v-model="selectedCategory" 
+              @change="generateDeck"
+              class="w-full bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold text-xs landscape:text-[11px] rounded-xl p-2 landscape:p-1 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            >
+              <option value="l15_1">L15① こわしてしまって（〜てしまいました）</option>
+              <option value="cond_tara">仮定表現① 〜たら (たべます ➔ たべたら)</option>
+              <option value="cond_ba">仮定表現② 〜ば／〜なら (あるきます ➔ あるけば)</option>
+              <option value="cond_nakereba">仮定表現③ 〜なければ (たべません ➔ たべなければ)</option>
+              <option value="all">すべての語句を混ぜて練習</option>
+            </select>
+          </div>
+
+          <!-- 出題数選択 -->
+          <div>
+            <label class="text-[10px] landscape:text-[9px] font-bold text-slate-500 mb-0.5 block">2. 出題数</label>
+            <select 
+              v-model="cardLimit" 
+              @change="generateDeck"
+              class="w-full bg-slate-50 border border-slate-300 text-slate-700 text-xs landscape:text-[11px] rounded-xl p-2 landscape:p-1 focus:ring-2 focus:ring-indigo-500 focus:outline-none font-medium"
+            >
+              <option value="15">15問（ランダム抽出）</option>
+              <option value="all">全問練習</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 進捗バー & Starフィルター -->
+        <div class="flex justify-between items-center pt-0.5">
+          <div class="flex-1 mr-3">
+            <div class="flex justify-between text-[11px] text-slate-500 mb-0.5 font-medium">
+              <span>カード進捗</span>
+              <span>{{ currentDeck.length > 0 ? currentIndex + 1 : 0 }} / {{ currentDeck.length }}</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+              <div 
+                class="bg-indigo-600 h-1.5 rounded-full transition-all duration-300"
+                :style="{ width: currentDeck.length ? `${((currentIndex + 1) / currentDeck.length) * 100}%` : '0%' }"
+              ></div>
+            </div>
+          </div>
+
+          <button 
+            @click="toggleStarFilter" 
+            :class="['px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 border transition-all shrink-0', onlyStarred ? 'bg-amber-500 text-white border-amber-500 shadow-sm' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50']"
+          >
+            <i :class="['fa-star', onlyStarred ? 'fa-solid' : 'fa-regular']"></i>
+            <span>⭐ ({{ starredIds.length }})</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- メインカード表示エリア -->
+      <div v-if="currentDeck.length > 0 && currentCard" class="my-auto py-1">
+        <div 
+          class="relative w-full h-48 sm:h-56 landscape:h-36 cursor-pointer perspective-1000 touch-none"
+          @click="flipCard"
+          @touchstart="handleTouchStart"
+          @touchmove.prevent
+          @touchend="handleTouchEnd"
+        >
+          <div 
+            class="w-full h-full transform-style-3d relative rounded-2xl shadow-lg border border-slate-100 bg-white"
+            :class="{ 'rotate-y-180': isFlipped }"
+          >
+            <!-- 表面 (Front) -->
+            <div class="absolute inset-0 w-full h-full backface-hidden rounded-2xl p-4 landscape:p-2 flex flex-col justify-between items-center bg-gradient-to-br from-white to-indigo-50/40">
+              <div class="w-full flex justify-end items-center">
+                <button 
+                  @click.stop="toggleStar(currentCard.id)" 
+                  class="text-lg p-1 text-slate-300 hover:text-amber-400 transition-colors"
+                >
+                  <i :class="['fa-star', isStarred(currentCard.id) ? 'fa-solid text-amber-400' : 'fa-regular']"></i>
+                </button>
+              </div>
+
+              <div class="text-center my-auto px-2">
+                <div class="text-xl sm:text-2xl landscape:text-lg font-extrabold text-slate-800 leading-snug mb-0.5">
+                  {{ currentCard.formal }}
+                </div>
+                <div v-if="currentCard.hint" class="text-[11px] landscape:text-[10px] text-slate-400 font-medium mt-0.5">
+                  辞書形: {{ currentCard.hint }}
+                </div>
+              </div>
+
+              <div class="flex items-center gap-1 text-slate-400 text-[11px] font-medium">
+                <span><i class="fa-solid fa-rotate text-indigo-400"></i> タップして裏返す</span>
+              </div>
+            </div>
+
+            <!-- 裏面 (Back) -->
+            <div class="absolute inset-0 w-full h-full backface-hidden rotate-y-180 rounded-2xl p-4 landscape:p-2 flex flex-col justify-between items-center bg-gradient-to-br from-indigo-600 to-violet-700 text-white">
+              <div class="w-full flex justify-end items-center">
+                <button 
+                  @click.stop="toggleStar(currentCard.id)" 
+                  class="text-lg p-1 text-white/50 hover:text-amber-300 transition-colors"
+                >
+                  <i :class="['fa-star', isStarred(currentCard.id) ? 'fa-solid text-amber-300' : 'fa-regular']"></i>
+                </button>
+              </div>
+
+              <div class="text-center my-auto px-2">
+                <div class="text-xl sm:text-2xl landscape:text-lg font-extrabold text-amber-300 leading-snug mb-0.5 drop-shadow-sm">
+                  {{ currentCard.casual }}
+                </div>
+                <div class="text-[11px] landscape:text-[10px] text-indigo-200 font-medium">
+                  辞書形: {{ currentCard.hint }}
+                </div>
+              </div>
+
+              <div class="flex items-center gap-1 text-indigo-200 text-[11px] font-medium">
+                <span>答え合わせ</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- データなし表示 -->
+      <div v-else class="my-auto py-6 text-center bg-white rounded-2xl border border-dashed border-slate-300 p-4">
+        <div class="text-3xl text-slate-300 mb-2"><i class="fa-solid fa-star-half-stroke"></i></div>
+        <p class="text-slate-600 font-bold text-xs mb-1">表示できるカードがありません</p>
+        <p class="text-[11px] text-slate-400 mb-3">選択したカテゴリーでお気に入り（⭐）に登録された語句がありません。</p>
+        <button 
+          @click="onlyStarred = false; generateDeck()" 
+          class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg shadow-md hover:bg-indigo-700"
+        >
+          すべてのカードを表示する
+        </button>
+      </div>
+
+      <!-- 操作ボタンバー -->
+      <div class="space-y-1.5 shrink-0 pt-0.5">
+        <div class="grid grid-cols-2 gap-2">
+          <button 
+            @click="prevCard" 
+            :disabled="currentIndex === 0"
+            class="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 text-xs sm:text-sm"
+          >
+            <i class="fa-solid fa-chevron-left"></i> 前へ
+          </button>
+          <button 
+            @click="nextCard" 
+            :disabled="currentIndex >= currentDeck.length - 1"
+            class="py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-1.5 text-xs sm:text-sm"
+          >
+            次へ <i class="fa-solid fa-chevron-right"></i>
+          </button>
+        </div>
+
+        <div class="flex justify-between gap-2">
+          <button 
+            @click="generateDeck" 
+            class="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition-colors"
+          >
+            <i class="fa-solid fa-shuffle"></i> 15問をランダム抽出
+          </button>
+          <button 
+            @click="resetIndex" 
+            class="py-2 px-3 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-medium rounded-lg text-xs flex items-center justify-center gap-1"
+          >
+            <i class="fa-solid fa-rotate-right"></i> 最初から
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- 一覧表示タブ -->
+    <main v-if="currentTab === 'list'" class="flex-1 p-3 overflow-y-auto touch-pan-y">
+      <div class="mb-2">
+        <label class="text-[10px] font-bold text-slate-500 mb-0.5 block">表示するカテゴリー</label>
+        <select 
+          v-model="selectedCategory" 
+          @change="generateDeck"
+          class="w-full bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold text-xs rounded-xl p-2"
+        >
+          <option value="l15_1">L15① こわしてしまって（〜てしまいました）</option>
+          <option value="cond_tara">仮定表現① 〜たら (たべます ➔ たべたら)</option>
+          <option value="cond_ba">仮定表現② 〜ば／〜なら (あるきます ➔ あるけば)</option>
+          <option value="cond_nakereba">仮定表現③ 〜なければ (たべません ➔ たべなければ)</option>
+          <option value="all">すべての語句一覧</option>
+        </select>
+      </div>
+
+      <div class="mb-2 flex justify-between items-center">
+        <p class="text-xs text-slate-500 font-medium">全 {{ getCategoryFullList().length }} 項目</p>
+        <div class="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded-md">
+          ⭐ {{ starredIds.length }} 件
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <div 
+          v-for="item in getCategoryFullList()" 
+          :key="item.id"
+          class="p-2.5 bg-white rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between gap-2 hover:border-indigo-300 transition-colors"
         >
           <i class="fa-solid fa-layer-group"></i> カード
         </button>
