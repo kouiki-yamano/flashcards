@@ -120,9 +120,10 @@
       <!-- メインカード表示エリア -->
       <div v-if="currentDeck.length > 0 && currentCard" class="my-auto py-2 landscape:py-1">
         <div 
-          class="relative w-full h-64 sm:h-72 landscape:h-48 cursor-pointer perspective-1000"
+          class="relative w-full h-64 sm:h-72 landscape:h-48 cursor-pointer perspective-1000 touch-none"
           @click="flipCard"
           @touchstart="handleTouchStart"
+          @touchmove.prevent
           @touchend="handleTouchEnd"
         >
           <div 
